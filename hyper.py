@@ -19,7 +19,7 @@ import tqdm
 import SimpleITK as sitk
 
 
-
+dd
 def read_images(folder_hdr, s_v, result_dir):
     '''
     Read image by hdr file
