@@ -87,11 +87,51 @@ class ApproximateKSVD(object):
         return self._transform(self.components_, X)
 
 
+
+def draw_all_wav(spec_image, all_wav_dir = "input_data/COMBINED/2/all_wav/"):
+
+    for i in range (spec_image.shape[2]):
+        img = spec_image[:,:,i]
+        rgb = np.zeros((img.shape[0], img.shape[1], 3))
+        rgb[:, :, 0] = img
+        rgb[:, :, 1] = img
+        rgb[:, :, 2] = img
+        cv2.imwrite(all_wav_dir + "channel_" + str(i) + ".png", np.int64(rgb * 255))
+
+    return
+
+
+def remove_noisy(spec_image, s_v):
+    if s_v == "SWIR":
+        spec_image[:, :, 78:86] = 0
+        spec_image[:, :, 154:270] = 0
+
+    if s_v == "COMBINED":
+        spec_image[:, :, 0:76] = 0
+        spec_image[:, :, 77] = 0
+        spec_image[:, :, 84:163] = 0
+        spec_image[:, :, 168] = 0
+        spec_image[:, :, 180] = 0
+        spec_image[:, :, 183:257] = 0
+        spec_image[:, :, 477] = 0
+        spec_image[:, :, 481] = 0
+        spec_image[:, :, 484] = 0
+        spec_image[:, :, 488] = 0
+        spec_image[:, :, 492] = 0
+        spec_image[:, :, 495] = 0
+        spec_image[:, :, 499] = 0
+        spec_image[:, :, 502] = 0
+        spec_image[:, :, 505] = 0
+        spec_image[:, :, 507] = 0
+
+    return spec_image
+
 def anomaly_detection(folder_hdr, s_v):
     import os
     ls_dir = os.listdir(folder_hdr)
     result_dir = folder_hdr + "//result_anomaly"
-    os.mkdir(result_dir)
+    if not os.path.isdir(result_dir):
+        os.mkdir(result_dir)
     for file in ls_dir:
         if not file.endswith(".hdr"):
             continue
@@ -99,9 +139,9 @@ def anomaly_detection(folder_hdr, s_v):
         name_hdr = folder_hdr + "//" + file
         spec = spectral.envi.open(name_hdr)
         spec_image = np.array(spec.asarray())
-        if s_v == "SWIR":
-            spec_image[:,:,78:86] = 0
-            spec_image[:,:,154:270] = 0
+        spec_image = remove_noisy(spec_image,s_v)
+        draw_all_wav(spec_image)
+
 
 
         pixel_array = spec_image.reshape(spec_image.shape[0] * spec_image.shape[1], spec_image.shape[2])
@@ -133,12 +173,12 @@ def anomaly_detection(folder_hdr, s_v):
         del pixel_array
         norms = np.linalg.norm(rm_class, axis=1)
 
-        percentile = np.percentile(norms.ravel(), 95)
+        percentile = np.percentile(norms.ravel(), 90)
         norms_binary = norms.copy()
         norms_binary[norms_binary < percentile] = 0
         norms_binary[norms_binary >= percentile] = 1
         norms_binary = norms_binary.reshape((rows, cols))
-        cv2.imwrite(result_dir+ "//" + file.split(".")[0] + ".png" , np.int64(norms_binary*255) )
+        cv2.imwrite(result_dir + "//" + file.split(".")[0] + ".png" , np.int64(norms_binary*255))
         save_changes = rm_class.reshape((rows, cols, rm_class.shape[1]))
         del rm_class
         spec = spectral.envi.open(name_hdr)
@@ -154,4 +194,4 @@ def anomaly_detection(folder_hdr, s_v):
 
 
 
-anomaly_detection("input_data/COMBINED/2", "")
+anomaly_detection("input_data/COMBINED/2", "COMBINED")

@@ -19,7 +19,7 @@ import tqdm
 import SimpleITK as sitk
 
 
-dd
+
 def read_images(folder_hdr, s_v, result_dir):
     '''
     Read image by hdr file
@@ -52,7 +52,7 @@ def read_images(folder_hdr, s_v, result_dir):
         
     cv2.imwrite(result_dir+s_v +".png" , np.int64(first_spec*255))
     
-    output_name_hdr = result_dir + "//__" + file +".hdr"
+    output_name_hdr = result_dir + "//__" + file
     
     return first_spec, spec_image, name_hdr, output_name_hdr
 
@@ -808,7 +808,7 @@ def demons(swir, vnir, full_image, full_swir, full_vnir):
     full_image_new = full_image.copy()
     
     for i in tqdm.tqdm(range (full_vnir.shape[2])):
-        moving =  full_vnir[:,:,i]
+        moving = full_vnir[:,:,i]
         moving = sitk.GetImageFromArray(moving)
         t = sitk.Resample(moving,fixed,outTx, sitk.sitkBSpline,0.0,moving.GetPixelID())
         tt = sitk.GetArrayViewFromImage(t)
@@ -898,7 +898,7 @@ if __name__ == '__main__':
         
     else:
         full_image, full_swir, full_vnir = fuse_by_sift(swir_img,vnir_img, result_dir, full_swir, full_vnir, False)
-        mean_image, vnir, swir, full_image_shared  = sort_fused_image_bands_and_make_hdr(full_image,name_hdr_swir,name_hdr_vnir, full_swir, full_vnir, flag_save=False)
+        mean_image, vnir, swir, full_image_shared = sort_fused_image_bands_and_make_hdr(full_image,name_hdr_swir,name_hdr_vnir, full_swir, full_vnir, flag_save=False)
         #rgb_mean_image = image_to_rgb (mean_image)
         #cv2.imwrite(result_dir+"combined_after_polynom" +".png" ,np.int64(rgb_mean_image*255))
         #rgb_mean_image = image_to_rgb (vnir)
@@ -908,7 +908,11 @@ if __name__ == '__main__':
         print("Till demons " + str(time.time() - start) + " seconds")
 
         full_image_new = demons(swir, vnir, full_image, full_swir, full_vnir)
-        mean_image, vnir, swir, full_image_shared  = sort_fused_image_bands_and_make_hdr(full_image_new,name_hdr_swir,name_hdr_vnir, full_swir, full_vnir)
+        full_swir = full_swir[20:-20, 20:-20, :]
+        full_vnir = full_vnir[20:-20, 20:-20, :]
+        full_image_new = full_image_new[20:-20, 20:-20, :]
+
+        mean_image, vnir, swir, full_image_shared = sort_fused_image_bands_and_make_hdr(full_image_new,name_hdr_swir,name_hdr_vnir, full_swir, full_vnir)
         rgb_mean_image = image_to_rgb (mean_image)
         cv2.imwrite(result_dir+"combined_demon" +".png" ,np.int64(rgb_mean_image*255))
     
