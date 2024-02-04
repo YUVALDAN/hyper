@@ -126,6 +126,48 @@ def remove_noisy(spec_image, s_v):
 
     return spec_image
 
+def draw_anomalies_on_img (norms_binary, spec_image, result_dir):
+
+    img = spec_image[:, :, 462]
+    img[norms_binary == 1] = 1
+    rgb = np.zeros((img.shape[0], img.shape[1], 3))
+    rgb[:, :, 0] = img
+    rgb[:, :, 1] = img
+    rgb[:, :, 2] = img
+    cv2.imwrite(result_dir + "/" + "anomalies" + ".png", np.int64(rgb * 255))
+
+    return
+
+def calc_NDVI_mat(name_hdr, result_dir, L=1):
+    spec = spectral.envi.open(name_hdr)
+    spec_image = np.array(spec.asarray())
+    meta = spec.metadata
+    c_850 = np.median(spec_image[:, :, 458:468], axis=2)
+    c_750 = np.median(spec_image[:, :, 400:410], axis=2)
+    ndvi = (c_850 - c_750) / (c_850 + c_750)
+    savi = (c_850 - c_750) / (c_850 + c_750 + L) * (1 + L)
+    cv2.imwrite(result_dir + "//" + "NDVI.png", np.int64(ndvi * 255))
+    cv2.imwrite(result_dir + "//" + "SAVI.png", np.int64(savi * 255))
+
+    ndvi[ndvi >= 0.2] = 1
+    savi[savi >= 0.1] = 1
+
+    cv2.imwrite(result_dir + "//" + "NDVI2.png", np.int64(ndvi * 255))
+    cv2.imwrite(result_dir + "//" + "SAVI2.png", np.int64(savi * 255))
+
+    img = spec_image[:,:,462]
+    img[ndvi == 1] = 1
+    img[savi == 1] = 1
+
+    rgb = np.zeros((img.shape[0], img.shape[1], 3))
+    rgb[:, :, 0] = img
+    rgb[:, :, 1] = img
+    rgb[:, :, 2] = img
+    cv2.imwrite(result_dir + "/" + "NDVISAVI3" + ".png", np.int64(rgb * 255))
+
+    return ndvi, savi
+
+
 def anomaly_detection(folder_hdr, s_v):
     import os
     ls_dir = os.listdir(folder_hdr)
@@ -138,6 +180,7 @@ def anomaly_detection(folder_hdr, s_v):
 
         name_hdr = folder_hdr + "//" + file
         spec = spectral.envi.open(name_hdr)
+        ndvi, savi = calc_NDVI_mat(name_hdr, folder_hdr)
         spec_image = np.array(spec.asarray())
         spec_image = remove_noisy(spec_image,s_v)
         draw_all_wav(spec_image)
@@ -156,7 +199,6 @@ def anomaly_detection(folder_hdr, s_v):
         cols = spec_image.shape[1]
 
         Y = pixel_array[ind]
-        del spec_image
         del spec
         Y = np.float64(Y)
         dico1 = ApproximateKSVD(n_components=7, transform_n_nonzero_coefs=3)
@@ -178,6 +220,10 @@ def anomaly_detection(folder_hdr, s_v):
         norms_binary[norms_binary < percentile] = 0
         norms_binary[norms_binary >= percentile] = 1
         norms_binary = norms_binary.reshape((rows, cols))
+        norms_binary[ndvi == 1] = 0
+        norms_binary[savi == 1] = 0
+
+        draw_anomalies_on_img (norms_binary, spec_image, result_dir)
         cv2.imwrite(result_dir + "//" + file.split(".")[0] + ".png" , np.int64(norms_binary*255))
         save_changes = rm_class.reshape((rows, cols, rm_class.shape[1]))
         del rm_class
@@ -189,6 +235,7 @@ def anomaly_detection(folder_hdr, s_v):
         name_hdr = result_dir + "//" + file.split(".")[0] + "_result.hdr"
         spectral.envi.save_image(name_hdr, spec_array, dtype=np.float32, metadata=spec.metadata, interleave="bsq",
                                  ext="", force=True)
+
 
 
 
