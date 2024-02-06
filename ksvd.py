@@ -1,12 +1,12 @@
 
 #### ksvd
-
-
 import numpy as np
 import scipy as sp
 from sklearn.linear_model import orthogonal_mp_gram
 import spectral
 import cv2
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 class ApproximateKSVD(object):
     def __init__(self, n_components, max_iter=10, tol=1e-6,
@@ -129,12 +129,9 @@ def remove_noisy(spec_image, s_v):
 def draw_anomalies_on_img (norms_binary, spec_image, result_dir):
 
     img = spec_image[:, :, 462]
-    img[norms_binary == 1] = 1
-    rgb = np.zeros((img.shape[0], img.shape[1], 3))
-    rgb[:, :, 0] = img
-    rgb[:, :, 1] = img
-    rgb[:, :, 2] = img
-    cv2.imwrite(result_dir + "/" + "anomalies" + ".png", np.int64(rgb * 255))
+    img[img>0.999] = 0.8
+    img[norms_binary > 0.9999] = 1
+    cv2.imwrite(result_dir + "/" + "anomalies" + ".png", np.int64(img * 255))
 
     return
 
@@ -168,6 +165,65 @@ def calc_NDVI_mat(name_hdr, result_dir, L=1):
     return ndvi, savi
 
 
+def calc_pca(original_data, data, result_dir, n_components=3):
+
+    # Standardize the data (mean centering)
+    scaler = StandardScaler()
+    data_standardized = scaler.fit_transform(data)
+
+    # Apply PCA
+    pca = PCA(n_components=n_components)
+    principal_components = pca.fit_transform(data_standardized)
+
+    # Reconstruct the data
+    reconstructed_data = pca.inverse_transform(principal_components)
+
+    # Calculate residuals (reconstruction errors)
+    residuals = np.sum((data_standardized - reconstructed_data) ** 2, axis=1)
+    threshold = np.percentile(residuals, 95)
+
+    # Identify anomalies based on residuals
+    residuals = residuals.reshape((original_data.shape[0], original_data.shape[1]))
+
+    residuals[residuals < threshold] = 0
+    residuals[residuals > threshold] = 1
+
+    cv2.imwrite(result_dir + "//" + "PCA.png", np.int64(residuals * 255))
+
+    img = original_data[:, :, 462]
+    img[residuals == 1] = 1
+
+    rgb = np.zeros((img.shape[0], img.shape[1], 3))
+    rgb[:, :, 0] = img
+    rgb[:, :, 1] = img
+    rgb[:, :, 2] = img
+    cv2.imwrite(result_dir + "/" + "PCA3" + ".png", np.int64(rgb * 255))
+
+    return
+
+
+def calc_ndsi(name_hdr, result_dir, ndsi_threshold=0.2):
+    spec = spectral.envi.open(name_hdr)
+    spec_image = np.array(spec.asarray())
+    meta = spec.metadata
+    img = spec_image[:, :, 462]
+    c_850 = np.mean(spec_image[:, :, 458:468], axis=2)
+    c_600 = np.mean(spec_image[:, :, 300:345], axis=2)
+    ndsi = (c_600 - c_850) / (c_850 + c_600)
+    ndsi = np.abs(ndsi)
+    ndsi[ndsi > ndsi_threshold] = 1
+    cv2.imwrite(result_dir + "//" + "ndsi.png", np.int64(ndsi * 255))
+
+    img[ndsi==1] = 1
+    rgb = np.zeros((img.shape[0], img.shape[1], 3))
+    rgb[:, :, 0] = img
+    rgb[:, :, 1] = img
+    rgb[:, :, 2] = img
+    cv2.imwrite(result_dir + "/" + "ndsi3" + ".png", np.int64(rgb * 255))
+
+    return ndsi
+
+
 def anomaly_detection(folder_hdr, s_v):
     import os
     ls_dir = os.listdir(folder_hdr)
@@ -180,14 +236,16 @@ def anomaly_detection(folder_hdr, s_v):
 
         name_hdr = folder_hdr + "//" + file
         spec = spectral.envi.open(name_hdr)
-        ndvi, savi = calc_NDVI_mat(name_hdr, folder_hdr)
+        if s_v == "COMBINED":
+            ndvi, savi = calc_NDVI_mat(name_hdr, folder_hdr)
+            ndsi = calc_ndsi(name_hdr, result_dir)
+
         spec_image = np.array(spec.asarray())
         spec_image = remove_noisy(spec_image,s_v)
         draw_all_wav(spec_image)
-
-
-
         pixel_array = spec_image.reshape(spec_image.shape[0] * spec_image.shape[1], spec_image.shape[2])
+
+        calc_pca(spec_image, pixel_array, result_dir)
 
         norms = np.linalg.norm(pixel_array, axis=1)
         norms = norms.reshape(norms.shape[0], 1)
@@ -220,11 +278,16 @@ def anomaly_detection(folder_hdr, s_v):
         norms_binary[norms_binary < percentile] = 0
         norms_binary[norms_binary >= percentile] = 1
         norms_binary = norms_binary.reshape((rows, cols))
-        norms_binary[ndvi == 1] = 0
-        norms_binary[savi == 1] = 0
 
-        draw_anomalies_on_img (norms_binary, spec_image, result_dir)
-        cv2.imwrite(result_dir + "//" + file.split(".")[0] + ".png" , np.int64(norms_binary*255))
+
+        if s_v == "COMBINED":
+            norms_binary[ndvi == 1] = 0
+            norms_binary[savi == 1] = 0
+            norms_binary[ndsi == 1] = 0
+
+            draw_anomalies_on_img(norms_binary, spec_image, result_dir)
+
+        cv2.imwrite(result_dir + "//" + file.split(".")[0] + ".png", np.int64(norms_binary*255))
         save_changes = rm_class.reshape((rows, cols, rm_class.shape[1]))
         del rm_class
         spec = spectral.envi.open(name_hdr)
@@ -240,5 +303,5 @@ def anomaly_detection(folder_hdr, s_v):
 
 
 
-
 anomaly_detection("input_data/COMBINED/2", "COMBINED")
+# anomaly_detection("input_data/SWIR/2", "SWIR")
