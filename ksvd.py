@@ -107,12 +107,9 @@ def remove_noisy(spec_image, s_v):
         spec_image[:, :, 154:270] = 0
 
     if s_v == "COMBINED":
-        spec_image[:, :, 0:76] = 0
-        spec_image[:, :, 77] = 0
-        spec_image[:, :, 84:163] = 0
-        spec_image[:, :, 168] = 0
-        spec_image[:, :, 180] = 0
-        spec_image[:, :, 183:257] = 0
+        spec_image[:, :, 0:272] = 0
+        spec_image[:, :, 274] = 0
+        spec_image[:, :, 276] = 0
         spec_image[:, :, 477] = 0
         spec_image[:, :, 481] = 0
         spec_image[:, :, 484] = 0
@@ -123,17 +120,31 @@ def remove_noisy(spec_image, s_v):
         spec_image[:, :, 502] = 0
         spec_image[:, :, 505] = 0
         spec_image[:, :, 507] = 0
+        spec_image[:, :, 501] = 0
+        spec_image[:, :, 509] = 0
+        spec_image[:, :, 513] = 0
+        spec_image[:, :, 515] = 0
+        spec_image[:, :, 517] = 0
+        spec_image[:, :, 520] = 0
+        spec_image[:, :, 541] = 0
 
     return spec_image
 
-def draw_anomalies_on_img (norms_binary, spec_image, result_dir):
 
-    img = spec_image[:, :, 462]
-    img[img>0.999] = 0.8
-    img[norms_binary > 0.9999] = 1
-    cv2.imwrite(result_dir + "/" + "anomalies" + ".png", np.int64(img * 255))
+def draw_anomalies_on_img (norms_binary, name_hdr, result_dir):
+
+    spec = spectral.envi.open(name_hdr)
+    spec_image = np.array(spec.asarray())
+    img = spec_image[:, :, 289]
+    rgb = np.zeros((img.shape[0], img.shape[1], 3))
+    rgb[:, :, 0] = img
+    rgb[:, :, 1] = img
+    rgb[:, :, 2] = img
+    rgb[norms_binary == 1] = [1,0,0]
+    cv2.imwrite(result_dir + "/" + "anomalies" + ".png", np.int64(rgb * 255))
 
     return
+
 
 def calc_NDVI_mat(name_hdr, result_dir, L=1):
     spec = spectral.envi.open(name_hdr)
@@ -202,7 +213,7 @@ def calc_pca(original_data, data, result_dir, n_components=3):
     return
 
 
-def calc_ndsi(name_hdr, result_dir, ndsi_threshold=0.2):
+def calc_ndsi(name_hdr, result_dir, ndsi_threshold=0.25):
     spec = spectral.envi.open(name_hdr)
     spec_image = np.array(spec.asarray())
     meta = spec.metadata
@@ -214,7 +225,7 @@ def calc_ndsi(name_hdr, result_dir, ndsi_threshold=0.2):
     ndsi[ndsi > ndsi_threshold] = 1
     cv2.imwrite(result_dir + "//" + "ndsi.png", np.int64(ndsi * 255))
 
-    img[ndsi==1] = 1
+    img[ndsi == 1] = 1
     rgb = np.zeros((img.shape[0], img.shape[1], 3))
     rgb[:, :, 0] = img
     rgb[:, :, 1] = img
@@ -237,8 +248,8 @@ def anomaly_detection(folder_hdr, s_v):
         name_hdr = folder_hdr + "//" + file
         spec = spectral.envi.open(name_hdr)
         if s_v == "COMBINED":
-            ndvi, savi = calc_NDVI_mat(name_hdr, folder_hdr)
-            ndsi = calc_ndsi(name_hdr, result_dir)
+           ndvi, savi = calc_NDVI_mat(name_hdr, folder_hdr)
+           ndsi = calc_ndsi(name_hdr, result_dir)
 
         spec_image = np.array(spec.asarray())
         spec_image = remove_noisy(spec_image,s_v)
@@ -273,7 +284,7 @@ def anomaly_detection(folder_hdr, s_v):
         del pixel_array
         norms = np.linalg.norm(rm_class, axis=1)
 
-        percentile = np.percentile(norms.ravel(), 90)
+        percentile = np.percentile(norms.ravel(), 95)
         norms_binary = norms.copy()
         norms_binary[norms_binary < percentile] = 0
         norms_binary[norms_binary >= percentile] = 1
@@ -285,10 +296,9 @@ def anomaly_detection(folder_hdr, s_v):
             norms_binary[savi == 1] = 0
             norms_binary[ndsi == 1] = 0
 
-            draw_anomalies_on_img(norms_binary, spec_image, result_dir)
+        draw_anomalies_on_img(norms_binary, name_hdr, result_dir)
 
         cv2.imwrite(result_dir + "//" + file.split(".")[0] + ".png", np.int64(norms_binary*255))
-        save_changes = rm_class.reshape((rows, cols, rm_class.shape[1]))
         del rm_class
         spec = spectral.envi.open(name_hdr)
         spec_image = np.array(spec.asarray())
@@ -303,5 +313,5 @@ def anomaly_detection(folder_hdr, s_v):
 
 
 
-anomaly_detection("input_data/COMBINED/2", "COMBINED")
+anomaly_detection("input_data/COMBINED/3", "COMBINED")
 # anomaly_detection("input_data/SWIR/2", "SWIR")
